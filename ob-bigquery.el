@@ -116,7 +116,7 @@ Prepare SESSION according to the header arguments specified in PARAMS."
 
 (defun org-babel-bigquery--read-cell (cell)
   "Process CELL to remove unnecessary characters."
-  (org-babel-read cell t))
+  (org-babel-read (org-quote-vert cell) t))
 
 (provide 'ob-bigquery)
 
