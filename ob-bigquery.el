@@ -32,23 +32,19 @@
 (require 'ob)
 (require 'ob-sql)
 
-(declare-function org-table-convert-region "org-table"
-		  (beg0 end0 &optional separator))
-;;(declare-function orgtbl-to-csv "org-table" (table params))
-(declare-function org-table-to-lisp "org-table" (&optional txt))
-
 (add-to-list 'org-src-lang-modes  '("bigquery" . sql))
-;;(add-to-list 'org-man-source-highlight-langs  '(bigquery "sql"))
 
 (defvar org-babel-default-header-args:bigquery '(
-                                                 (:format . "pretty")
+                                                 (:format . "csv")
+                                                 (:maxrows . "100")
                                                  (:headers-p . "yes")
                                                  ))
 
 (defvar org-babel-header-args:bigquery
   '((project   . :any)
-    (format    . :any)
-    (headers-p . :any)
+    (format    . ("csv" "pretty"))
+    (maxrows   . :any)
+    (headers-p . ("yes" "no"))
     )
   "Bigquery specific header args.")
 
@@ -57,40 +53,69 @@
   (org-babel-sql-expand-vars
    body (org-babel--get-vars params) t))
 
-(defvar org-babel-bigquery-command "bq --headless -sync")
+(defvar org-babel-bigquery-base-command "bq --headless -sync")
 
 (defun org-babel-execute:bigquery (body params)
   "Execute a block of Bigquery code with Babel.
 This function is called by `org-babel-execute-src-block'."
-  (let ((result-params (split-string (or (cdr (assq :results params)) "")))
-	      (project (cdr (assq :project params)))
-	      (format (cdr (assq :format params)))
-        (headers-p (cdr (assq :format params)))
-        )
+  (let* (
+         (processed-params (org-babel-process-params params))
+         (result-params (split-string (or (cdr (assq :results processed-params)) "")))
+	       (project (cdr (assq :project processed-params)))
+	       (format (cdr (assq :format processed-params)))
+	       (maxrows (cdr (assq :maxrows processed-params)))
+         (headers-p (cdr (assq :headers-p processed-params)))
+         (command (org-fill-template
+	                 "%cmd %project %format query %maxrows"
+	                 (list
+	                  (cons "cmd" org-babel-bigquery-base-command)
+	                  (cons "project" (if project (format "--project_id %s" project) ""))
+                    (cons "format" (format "--format %s" format))
+	                  (cons "maxrows" (format "--max_rows %s" maxrows))
+                    )))
+         (error-code 0)
+         (table-value)
+         )
+    (defun ob--register-error (exit-code stderr)
+      "Internal function to identify when the command returned an error
+by advising the relevant error hook. Org does not support any
+other mechanism to get this information"
+      (setq error-code exit-code))
+    (advice-add 'org-babel-eval-error-notify :before #'ob--register-error)
     (with-temp-buffer
       (insert
        (org-babel-eval
-	      (org-fill-template
-	       "%cmd %project %format query"
-	       (list
-	        (cons "cmd" org-babel-bigquery-command)
-	        (cons "project" (if project (format "--project_id %s" project) ""))
-	        (cons "format" (format "--format %s" (if format format "pretty")))
-          ))
+        command
 	      ;; body of the code block
-	      (org-babel-expand-body:bigquery body params)))
-      (org-babel-result-cond result-params
-        (buffer-string)
-        (if (equal (point-min) (point-max))
-	          ""
-          (delete-matching-lines "^[+]" (point-min) (point-max))
-          (if (org-table-p)
+	      (org-babel-expand-body:bigquery body processed-params)))
+      (advice-remove 'org-babel-eval-error-notify #'ob--register-error)
+      (setq table-value
+        (cond
+         ;; Error conditions, no output transformation
+         ((> error-code 0) (buffer-string))
+         ((equal (point-min) (point-max)) "")
+         ;; Transform the output according to mode and convert to table
+         (t
+          (when (equal format "pretty")
+            ;; Pretty format has a line after headers that confuses org. Removing that line
+            (delete-matching-lines "^[+]" (point-min) (point-max))
+            )
+          (when (equal format "csv")
+            ;; Escape pipes or org will get confused about them
+            (replace-string "|" "\\vert{}" nil  (point-min) (point-max))
+            (org-table-convert-region (point-min) (point-max) '(4))
+            )
+          (if (org-at-table-p)
               (org-babel-bigquery-table-or-scalar
 	             (org-babel-bigquery-offset-colnames
 	              (org-table-to-lisp) headers-p))
             (buffer-string))
           )
-      ))))
+         ))
+      (org-babel-result-cond result-params
+        (buffer-string) table-value
+        )
+      )))
 
 (defun org-babel-bigquery-table-or-scalar (result)
   "If RESULT looks like a trivial table, then unwrap it."
