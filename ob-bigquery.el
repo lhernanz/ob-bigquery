@@ -48,10 +48,25 @@
     )
   "Bigquery specific header args.")
 
+(defun org-babel-expand-vars:bigquery (body vars)
+  "Expand the variables held in VARS in BODY."
+  (mapc
+   (lambda (pair)
+     (setq body
+	         (replace-regexp-in-string
+	          (format "$%s" (car pair))
+	          (let ((val (cdr pair)))
+              (if (listp val)
+                  (orgtbl-to-csv val nil)
+                (if (stringp val) val (format "%S" val))))
+	          body)))
+   vars)
+  body)
+
 (defun org-babel-expand-body:bigquery (body params)
   "Expand BODY according to the values of PARAMS."
-  (org-babel-sql-expand-vars
-   body (org-babel--get-vars params) t))
+  (org-babel-expand-vars:bigquery
+   body (org-babel--get-vars params)))
 
 (defvar org-babel-bigquery-base-command "bq --headless -sync")
 
