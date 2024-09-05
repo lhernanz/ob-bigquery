@@ -76,17 +76,17 @@ This function is called by `org-babel-execute-src-block'."
   (let* (
          (processed-params (org-babel-process-params params))
          (result-params (split-string (or (cdr (assq :results processed-params)) "")))
-	       (project (cdr (assq :project processed-params)))
-	       (format (cdr (assq :format processed-params)))
-	       (maxrows (cdr (assq :maxrows processed-params)))
+         (project (cdr (assq :project processed-params)))
+         (format (cdr (assq :format processed-params)))
+         (maxrows (cdr (assq :maxrows processed-params)))
          (headers-p (cdr (assq :headers-p processed-params)))
          (command (org-fill-template
-	                 "%cmd %project %format query %maxrows"
-	                 (list
-	                  (cons "cmd" org-babel-bigquery-base-command)
-	                  (cons "project" (if project (format "--project_id %s" project) ""))
+                   "%cmd %project %format query %maxrows"
+                   (list
+                    (cons "cmd" org-babel-bigquery-base-command)
+                    (cons "project" (if project (format "--project_id %s" project) ""))
                     (cons "format" (format "--format %s" format))
-	                  (cons "maxrows" (format "--max_rows %s" maxrows))
+                    (cons "maxrows" (format "--max_rows %s" maxrows))
                     )))
          (error-code 0)
          (table-value)
@@ -101,32 +101,32 @@ other mechanism to get this information"
       (insert
        (org-babel-eval
         command
-	      ;; body of the code block
-	      (org-babel-expand-body:bigquery body processed-params)))
+        ;; body of the code block
+        (org-babel-expand-body:bigquery body processed-params)))
       (advice-remove 'org-babel-eval-error-notify #'ob--register-error)
       (setq table-value
-        (cond
-         ;; Error conditions, no output transformation
-         ((> error-code 0) (buffer-string))
-         ((equal (point-min) (point-max)) "")
-         ;; Transform the output according to mode and convert to table
-         (t
-          (when (equal format "pretty")
-            ;; Pretty format has a line after headers that confuses org. Removing that line
-            (delete-matching-lines "^[+]" (point-min) (point-max))
-            )
-          (when (equal format "csv")
-            ;; Escape pipes or org will get confused about them
-            (replace-string "|" "\\vert{}" nil  (point-min) (point-max))
-            (org-table-convert-region (point-min) (point-max) '(4))
-            )
-          (if (org-at-table-p)
-              (org-babel-bigquery-table-or-scalar
-	             (org-babel-bigquery-offset-colnames
-	              (org-table-to-lisp) headers-p))
-            (buffer-string))
-          )
-         ))
+            (cond
+             ;; Error conditions, no output transformation
+             ((> error-code 0) (buffer-string))
+             ((equal (point-min) (point-max)) "")
+             ;; Transform the output according to mode and convert to table
+             (t
+              (when (equal format "pretty")
+                ;; Pretty format has a line after headers that confuses org. Removing that line
+                (delete-matching-lines "^[+]" (point-min) (point-max))
+                )
+              (when (equal format "csv")
+                ;; Escape pipes or org will get confused about them
+                (replace-string "|" "\\vert{}" nil  (point-min) (point-max))
+                (org-table-convert-region (point-min) (point-max) '(4))
+                )
+              (if (org-at-table-p)
+                  (org-babel-bigquery-table-or-scalar
+                   (org-babel-bigquery-offset-colnames
+                    (org-table-to-lisp) headers-p))
+                (buffer-string))
+              )
+             ))
       (org-babel-result-cond result-params
         (buffer-string) table-value
         )
@@ -135,13 +135,13 @@ other mechanism to get this information"
 (defun org-babel-bigquery-table-or-scalar (result)
   "If RESULT looks like a trivial table, then unwrap it."
   (if (and (equal 1 (length result))
-	         (equal 1 (length (car result))))
+           (equal 1 (length (car result))))
       (org-babel-read (caar result) t)
     (mapcar (lambda (row)
-	            (if (eq 'hline row)
-		              'hline
-		            (mapcar #'org-babel-bigquery--read-cell row)))
-	          result)))
+              (if (eq 'hline row)
+                  'hline
+                (mapcar #'org-babel-bigquery--read-cell row)))
+            result)))
 
 (defun org-babel-bigquery-offset-colnames (table headers-p)
   "If HEADERS-P is non-nil then offset the first row as column names."
