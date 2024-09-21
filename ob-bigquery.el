@@ -5,6 +5,7 @@
 ;; Author: Luis Miguel Hernanz
 ;; Maintainer:
 ;; Keywords: literate programming, reproducible research
+;; Package-Version: 20240903.93446
 ;; URL:
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
@@ -34,6 +35,8 @@
 
 (add-to-list 'org-src-lang-modes  '("bigquery" . sql))
 
+(defvar org-babel-bigquery-base-command "bq --headless -sync")
+
 (defvar org-babel-default-header-args:bigquery '(
                                                  (:format . "csv")
                                                  (:maxrows . "100")
@@ -48,18 +51,38 @@
     )
   "Bigquery specific header args.")
 
+(defun org-babel-quote-list-field:bigquery (s)
+  "Quote field for inclusion in a bigquery statement. `S' is the
+field to quote. If the element is not a number, it will be
+quoted. The function supports quoting strings that already have
+quotes."
+  (cond
+   ((or (string= s "0") (and (numberp s) (= s 0))) 0)
+   ((/= (string-to-number s) 0) s) ;; Any other number not zero
+   (t (concat "\"" (mapconcat 'identity (split-string s "\"") "\"\"") "\"")))
+  )
+
 (defun org-babel-expand-vars:bigquery (body vars)
-  "Expand the variables held in VARS in BODY."
+  "Expand the variables held in VARS in BODY. Numbers are left as
+they are. String are quoted, list and horizontal tables are
+conveted into a list of comma separated values. Everything else
+is printed via `prin1'."
   (mapc
    (lambda (pair)
      (setq body
-	         (replace-regexp-in-string
-	          (format "$%s" (car pair))
-	          (let ((val (cdr pair)))
-              (if (listp val)
-                  (orgtbl-to-csv val nil)
-                (if (stringp val) val (format "%S" val))))
-	          body)))
+           (replace-regexp-in-string
+            (format "$%s\\b" (car pair))
+            (let ((val (cdr pair)))
+              (cond
+               ((stringp val) (format "\"%s\"" val))
+               ((listp val)
+                (orgtbl-to-generic
+                 (if (listp (car val))
+                     val
+                   (list val)) ;; Wrap simple lists to be handled as tables
+                 '(:sep "," :fmt org-babel-quote-list-field:bigquery)))
+               (t (format "%S" val))))
+            body)))
    vars)
   body)
 
@@ -67,8 +90,6 @@
   "Expand BODY according to the values of PARAMS."
   (org-babel-expand-vars:bigquery
    body (org-babel--get-vars params)))
-
-(defvar org-babel-bigquery-base-command "bq --headless -sync")
 
 (defun org-babel-execute:bigquery (body params)
   "Execute a block of Bigquery code with Babel.
