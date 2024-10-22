@@ -35,7 +35,12 @@
 
 (add-to-list 'org-src-lang-modes  '("bigquery" . sql))
 
-(defvar org-babel-bigquery-base-command "bq --headless -sync")
+(defvar org-babel-bigquery-base-command "bq --headless -sync"
+  "Command to invoke the bq command line utility.")
+
+(defvar org-babel-bigquery-number-regexp "^-?\\(?:[0-9]+\\(?:[.][0-9]*\\)?\\|[.][0-9]+\\)$"
+  "Regexp that will be used to identify numbers that need to be preserved as such (vs strings) in the query.")
+
 
 (defvar org-babel-default-header-args:bigquery '(
                                                  (:format . "csv")
@@ -51,40 +56,43 @@
     )
   "Bigquery specific header args.")
 
+
 (defun org-babel-quote-list-field:bigquery (s)
-  "Quote field for inclusion in a bigquery statement. `S' is the
+  "Quote field for inclusion in a bigquery statement. `s' is the
 field to quote. If the element is not a number, it will be
 quoted. The function supports quoting strings that already have
 quotes."
   (cond
-   ((or (string= s "0") (and (numberp s) (= s 0))) 0)
-   ((/= (string-to-number s) 0) s) ;; Any other number not zero
+   ((string-match org-babel-bigquery-number-regexp s) s) ;; Any number
    (t (concat "\"" (mapconcat 'identity (split-string s "\"") "\"\"") "\"")))
   )
 
 (defun org-babel-expand-vars:bigquery (body vars)
-  "Expand the variables held in VARS in BODY. Numbers are left as
-they are. String are quoted, list and horizontal tables are
-conveted into a list of comma separated values. Everything else
-is printed via `prin1'."
+  "Expand the variables held in VARS in BODY. Double quoted
+variables (e.g. `$$var') values are preserved as such. String are
+quoted, list and horizontal tables are converted into a list of
+comma separated values and their values quoted if they are
+strings. Everything else is printed via `prin1'."
   (mapc
    (lambda (pair)
-     (setq body
-           (replace-regexp-in-string
-            (format "$%s\\b" (car pair))
-            (let ((val (cdr pair)))
-              (cond
-               ((stringp val) (format "\"%s\"" val))
-               ((listp val)
-                (orgtbl-to-generic
-                 (if (listp (car val))
-                     val
-                   (list val)) ;; Wrap simple lists to be handled as tables
-                 '(:sep "," :fmt org-babel-quote-list-field:bigquery)))
-               (t (format "%S" val))))
-            body)))
+     (let ((name (car pair))
+           (val (cdr pair)))
+       (setq body
+             (thread-last
+               (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" val) body)
+               (replace-regexp-in-string (format "$%s\\b" name)
+                                         (cond
+                                          ((listp val)
+                                           (orgtbl-to-generic
+                                            (if (listp (car val))
+                                                val
+                                              (list val)) ;; Wrap simple lists to be handled as tables
+                                            '(:sep "," :fmt org-babel-quote-list-field:bigquery)))
+                                          (t (format "%S" val))))
+               ))))
    vars)
   body)
+
 
 (defun org-babel-expand-body:bigquery (body params)
   "Expand BODY according to the values of PARAMS."
