@@ -119,18 +119,17 @@ Double quoted variables (e.g. `$$var') values are preserved as
 such. String are quoted, list and horizontal tables are converted
 into a list of comma separated values and their values quoted if
 they are strings. Everything else is printed via `prin1'."
-  (setq body
-        (thread-last
-          (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" value) body)
-          (replace-regexp-in-string (format "$%s\\b" name)
-                                    (cond
-                                     ((listp value)
-                                      (orgtbl-to-generic
-                                       (if (listp (car value))
-                                           value
-                                         (list value)) ;; Wrap simple lists to be handled as tables
-                                       '(:sep "," :fmt ob-bigquery--quote-field)))
-                                     (t (format "%S" value)))))))
+  (thread-last
+    (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" value) body)
+    (replace-regexp-in-string (format "$%s\\b" name)
+                              (cond
+                               ((listp value)
+                                (orgtbl-to-generic
+                                 (if (listp (car value))
+                                     value
+                                   (list value)) ;; Wrap simple lists to be handled as tables
+                                 '(:sep "," :fmt ob-bigquery--quote-field)))
+                               (t (format "%S" value))))))
 
 
 ;;; Babel Interface implementation
@@ -143,7 +142,7 @@ See `ob-bigquery--expand-parameter' for the types of expansion supported."
      (lambda (pair)
        (let ((name (car pair))
              (val (cdr pair)))
-         (ob-biquery--expand-parameter (body name val))))
+         (setq body (ob-bigquery--expand-parameter body name val))))
      vars)
     body))
 
