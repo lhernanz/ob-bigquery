@@ -28,16 +28,16 @@ To install the package using ~quelpa~, install ~quelpa~ and ~quelpa-use-package~
 * Usage
 To create and execute a sample BigQuery query within an Org-mode source block, use the following example:
 
-#+begin_src org
-#+BEGIN_SRC bigquery :project "project-id" :maxrows 10 :var age=30
-SELECT name, age FROM `dataset.my_table` WHERE age > $age
-#+END_SRC
-#+end_src
+#+begin_example
+,#+BEGIN_SRC bigquery :project "project-id" :maxrows 10 :var age=30
+   SELECT name, age FROM `dataset.my_table` WHERE age > $age
+,#+END_SRC
+#+end_example
 
 Some comments about the above example:
-- The ~project~ argument enables you to use different GCP projects to execute different queries.
-- The ~maxrows~ argument overrides the default value of maxrows in ~bq~ to change the maximum values that the query will return.
-- You can use the standard ~var~ argument to create variables that will be replaced in the body. See next section about the different types of variables that are supported.
+- The ~project~ argument enables you to use different GCP projects to execute different queries. If not specified, ~bq~ will select the default project
+- The ~maxrows~ argument overrides the default value of maxrows in ~bq~ to change the maximum values that the query will return
+- You can use the standard ~var~ argument to create variables that will be replaced in the body. See next section about the different types of variables that are supported
 
 ** Using Different Types of Variables
 
