@@ -1,5 +1,4 @@
-Emacs org babel support for bigquery
-
+#+TITLE: ob-bigquery.el Emacs org babel support for BigQuery
 * Installation
 
 This package is not in any repository, therefore, you need to install it manually or by using any of the extensions that can consume packages from GitHub.
@@ -73,3 +72,4 @@ SELECT * FROM `dataset.my_table` WHERE greeting IN ($greetings)
   - [[https://cloud.google.com/bigquery/docs/reference/bq-cli-reference#bq_mk][bq command-line tool reference ]]
   - [[https://cloud.google.com/bigquery/docs/bq-command-line-tool][Explore the bq command-line tool ]]
   - [[https://cloud.google.com/sdk/docs/install-sdk][Quickstart: Install the Google Cloud CLI ]]
+  - [[https://cloud.google.com/bigquery?hl=en][BigQuery enterprise data warehouse]]
