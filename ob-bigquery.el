@@ -1,12 +1,14 @@
 ;;; ob-bigquery.el --- Babel Functions for BigQuery Databases -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2010-2023 Free Software Foundation, Inc.
+;; Copyright (C) 2024-2025 Luis Miguel Hernanz
 
 ;; Author: Luis Miguel Hernanz
-;; Maintainer:
-;; Keywords: literate programming, reproducible research
+;; Keywords: lisp
 ;; Package-Version: 20240903.93446
-;; URL:
+;; Package-Requires: ((emacs "29.1") (org "9.7"))
+;; URL: https://www.github.com/lhernanz/ob-bigquery
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -31,76 +33,122 @@
 (org-assert-version)
 
 (require 'ob)
-(require 'ob-sql)
+(require 'org-table)
+(require 'subr-x) ;; For thread-last
 
 (add-to-list 'org-src-lang-modes  '("bigquery" . sql))
 
-(defvar org-babel-bigquery-base-command "bq --headless -sync"
-  "Command to invoke the bq command line utility.")
+;;; Variables
+(defgroup ob-bigquery nil
+  "Settings for BigQuery integration with org-babel."
+  :group 'org-babel)
 
-(defvar org-babel-bigquery-number-regexp "^-?\\(?:[0-9]+\\(?:[.][0-9]*\\)?\\|[.][0-9]+\\)$"
-  "Regexp that will be used to identify numbers that need to be preserved as such (vs strings) in the query.")
+(defcustom ob-bigquery-base-command "bq --headless -sync"
+  "Command to invoke the bq command line utility."
+  :type 'string
+  :group 'ob-bigquery)
 
+(defcustom ob-bigquery-number-regexp "^-?\\(?:[0-9]+\\(?:[.][0-9]*\\)?\\|[.][0-9]+\\)$"
+  "Regexp that will be used to identify numbers that need to be
+ preserved (i.e. not quoted) as such (vs strings) in the query."
+  :type 'regexp
+  :group 'ob-bigquery)
 
-(defvar org-babel-default-header-args:bigquery '(
-                                                 (:format . "csv")
-                                                 (:maxrows . "100")
-                                                 (:headers-p . "yes")
-                                                 ))
+(defcustom org-babel-default-header-args:bigquery
+  '((:format . "csv")
+    (:maxrows . "100")
+    (:headers-p . "yes"))
+  "Default parameters that will be used when invoking the BQ command.
+These will be added to `ob-bigquery-base-command'. Notice that
+the pretty format might not handle values that need to be quoted
+in the right way. Use with caution."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'ob-bigquery)
 
-(defvar org-babel-header-args:bigquery
+(defcustom org-babel-header-args:bigquery
   '((project   . :any)
     (format    . ("csv" "pretty"))
     (maxrows   . :any)
-    (headers-p . ("yes" "no"))
-    )
-  "Bigquery specific header args.")
+    (headers-p . ("yes" "no")))
+  "Bigquery specific header arguments."
+  :type '(alist :key-type symbol :value-type (choice (const :tag "Any" :any)
+                                                     (repeat :tag "Options" string)))
+  :group 'ob-bigquery)
 
-
-(defun org-babel-quote-list-field:bigquery (s)
-  "Quote field for inclusion in a bigquery statement. `s' is the
-field to quote. If the element is not a number, it will be
-quoted. The function supports quoting strings that already have
-quotes."
+;;; Internal methods
+(defun ob-bigquery--quote-field (s)
+  "Quote field for inclusion in a bigquery statement.
+S is the field to quote. If the element is not a number (as
+defined by `ob-bigquery-number-regexp', it will be quoted. The
+function supports quoting strings that already have quotes."
   (cond
-   ((string-match org-babel-bigquery-number-regexp s) s) ;; Any number
-   (t (concat "\"" (mapconcat 'identity (split-string s "\"") "\"\"") "\"")))
-  )
+   ((string-match ob-bigquery-number-regexp s) s) ;; Any number
+   (t (concat "\"" (mapconcat 'identity (split-string s "\"") "\"\"") "\""))))
 
-(defun org-babel-expand-vars:bigquery (body vars)
-  "Expand the variables held in VARS in BODY. Double quoted
-variables (e.g. `$$var') values are preserved as such. String are
-quoted, list and horizontal tables are converted into a list of
-comma separated values and their values quoted if they are
-strings. Everything else is printed via `prin1'."
-  (mapc
-   (lambda (pair)
-     (let ((name (car pair))
-           (val (cdr pair)))
-       (setq body
-             (thread-last
-               (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" val) body)
-               (replace-regexp-in-string (format "$%s\\b" name)
-                                         (cond
-                                          ((listp val)
-                                           (orgtbl-to-generic
-                                            (if (listp (car val))
-                                                val
-                                              (list val)) ;; Wrap simple lists to be handled as tables
-                                            '(:sep "," :fmt org-babel-quote-list-field:bigquery)))
-                                          (t (format "%S" val))))
-               ))))
-   vars)
-  body)
+(defun ob-bigquery--table-or-scalar (result)
+  "If RESULT is a single element table, then unwrap it.
+Process cell contents by using `org-babel-read'."
+  (if (and (equal 1 (length result))
+           (equal 1 (length (car result))))
+      (org-babel-read (caar result) t)
+    (mapcar (lambda (row)
+              (if (eq 'hline row)
+                  'hline
+                (mapcar #'ob-bigquery--read-cell row)))
+            result)))
+
+(defun ob-bigquery--quote-vert (s)
+  "Replace \"|\" with \"\\vert{[]}\"."
+  (while (string-match "|" s)
+    (setq s (replace-match "\\vert{}" t t s)))
+  s)
+
+(defun ob-bigquery--read-cell (cell)
+  "Process CELL to remove unnecessary characters."
+  (org-babel-read (ob-bigquery--quote-vert cell) t))
+
+(defun ob-bigquery--offset-colnames (table headers-p)
+  "If HEADERS-P is non-nil then offset the first row as column names in TABLE."
+  (if headers-p
+      (cons (car table) (cons 'hline (cdr table)))
+    table))
+
+(defun ob-bigquery--expand-parameter (body name value)
+  "Expand the NAME parameter to its VALUE in BODY.
+Double quoted variables (e.g. `$$var') values are preserved as
+such. String are quoted, list and horizontal tables are converted
+into a list of comma separated values and their values quoted if
+they are strings. Everything else is printed via `prin1'."
+  (setq body
+        (thread-last
+          (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" value) body)
+          (replace-regexp-in-string (format "$%s\\b" name)
+                                    (cond
+                                     ((listp value)
+                                      (orgtbl-to-generic
+                                       (if (listp (car value))
+                                           value
+                                         (list value)) ;; Wrap simple lists to be handled as tables
+                                       '(:sep "," :fmt ob-bigquery--quote-field)))
+                                     (t (format "%S" value)))))))
 
 
-(defun org-babel-expand-body:bigquery (body params)
-  "Expand BODY according to the values of PARAMS."
-  (org-babel-expand-vars:bigquery
-   body (org-babel--get-vars params)))
+;;; Babel Interface implementation
+(defun org-babel-expand-body:bigquery (body params &optional processed-params)
+  "Expand BODY according to the values of PROCESSED-PARAMS (if provided) or PARAMS.
+See `ob-bigquery--expand-parameter' for the types of expansion supported."
+  (let ((vars (org-babel--get-vars (or processed-params
+                                       (org-babel-process-params params)))))
+    (mapc
+     (lambda (pair)
+       (let ((name (car pair))
+             (val (cdr pair)))
+         (ob-biquery--expand-parameter (body name val))))
+     vars)
+    body))
 
 (defun org-babel-execute:bigquery (body params)
-  "Execute a block of Bigquery code with Babel.
+  "Execute a BODY of Bigquery code with Babel using PARAMS.
 This function is called by `org-babel-execute-src-block'."
   (let* (
          (processed-params (org-babel-process-params params))
@@ -112,27 +160,29 @@ This function is called by `org-babel-execute-src-block'."
          (command (org-fill-template
                    "%cmd %project %format query %maxrows"
                    (list
-                    (cons "cmd" org-babel-bigquery-base-command)
+                    (cons "cmd" ob-bigquery-base-command)
                     (cons "project" (if project (format "--project_id %s" project) ""))
                     (cons "format" (format "--format %s" format))
-                    (cons "maxrows" (format "--max_rows %s" maxrows))
-                    )))
+                    (cons "maxrows" (format "--max_rows %s" maxrows)))))
          (error-code 0)
-         (table-value)
-         )
-    (defun ob--register-error (exit-code stderr)
+         (table-value))
+
+    (defun ob-bigquery--register-error (exit-code stderr)
       "Internal function to identify when the command returned an error
 by advising the relevant error hook. Org does not support any
-other mechanism to get this information"
+other mechanism to get this information."
       (setq error-code exit-code))
-    (advice-add 'org-babel-eval-error-notify :before #'ob--register-error)
+
+    (advice-add 'org-babel-eval-error-notify :before #'ob-bigquery--register-error)
+    ;; Execute command
     (with-temp-buffer
       (insert
        (org-babel-eval
         command
-        ;; body of the code block
-        (org-babel-expand-body:bigquery body processed-params)))
-      (advice-remove 'org-babel-eval-error-notify #'ob--register-error)
+        (org-babel-expand-body:bigquery body params processed-params)))
+      (advice-remove 'org-babel-eval-error-notify #'ob-bigquery--register-error)
+
+      ;; Process output
       (setq table-value
             (cond
              ;; Error conditions, no output transformation
@@ -142,50 +192,25 @@ other mechanism to get this information"
              (t
               (when (equal format "pretty")
                 ;; Pretty format has a line after headers that confuses org. Removing that line
-                (delete-matching-lines "^[+]" (point-min) (point-max))
-                )
+                (delete-matching-lines "^[+]" (point-min) (point-max)))
               (when (equal format "csv")
                 ;; Escape pipes or org will get confused about them
-                (replace-string "|" "\\vert{}" nil  (point-min) (point-max))
-                (org-table-convert-region (point-min) (point-max) '(4))
-                )
+                (goto-char (point-min))
+                (while (search-forward "|" nil t)
+                  (replace-match "\\vert{}" nil t))
+                (org-table-convert-region (point-min) (point-max) '(4)))
               (if (org-at-table-p)
-                  (org-babel-bigquery-table-or-scalar
-                   (org-babel-bigquery-offset-colnames
+                  (ob-bigquery--table-or-scalar
+                   (ob-bigquery--offset-colnames
                     (org-table-to-lisp) headers-p))
-                (buffer-string))
-              )
-             ))
+                (buffer-string)))))
       (org-babel-result-cond result-params
-        (buffer-string) table-value
-        )
-      )))
-
-(defun org-babel-bigquery-table-or-scalar (result)
-  "If RESULT looks like a trivial table, then unwrap it."
-  (if (and (equal 1 (length result))
-           (equal 1 (length (car result))))
-      (org-babel-read (caar result) t)
-    (mapcar (lambda (row)
-              (if (eq 'hline row)
-                  'hline
-                (mapcar #'org-babel-bigquery--read-cell row)))
-            result)))
-
-(defun org-babel-bigquery-offset-colnames (table headers-p)
-  "If HEADERS-P is non-nil then offset the first row as column names."
-  (if headers-p
-      (cons (car table) (cons 'hline (cdr table)))
-    table))
+        (buffer-string) table-value))))
 
 (defun org-babel-prep-session:bigquery (_session _params)
   "Raise an error because support for BigQuery sessions isn't implemented.
 Prepare SESSION according to the header arguments specified in PARAMS."
-  (error "BigQuery sessions not yet implemented"))
-
-(defun org-babel-bigquery--read-cell (cell)
-  "Process CELL to remove unnecessary characters."
-  (org-babel-read (org-quote-vert cell) t))
+  (error "BigQuery sessions have not been implemented yet"))
 
 (provide 'ob-bigquery)
 

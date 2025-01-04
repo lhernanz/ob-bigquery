@@ -1,0 +1,75 @@
+Emacs org babel support for bigquery
+
+* Installation
+
+This package is not in any repository, therefore, you need to install it manually or by using any of the extensions that can consume packages from GitHub.
+
+** Manually
+If installed manually in the load-path, the package can be configured using `use-package` as following.
+
+#+BEGIN_SRC emacs-lisp
+(use-package ob-bigquery :ensure t)
+#+END_SRC
+
+** Quelpa
+
+To install the package using ~quelpa~, install ~quelpa~ and ~quelpa-use-package~ and add the following to your Emacs configuration file:
+
+#+BEGIN_SRC emacs-lisp
+(use-package ob-bigquery
+  :quelpa (ob-bigquery :fetcher github :repo "lhernanz/ob-bigquery.git"))
+#+END_SRC
+
+** External dependencies
+   This package requires the ~bq~ command line tool that is part of the ~gcloud CLI~. See installation instructions [[https://cloud.google.com/sdk/docs/install][here]]. Authentication is delegated into the ~gcloud~ command. Therefore, you need to get the right credentials by using ~gcloud auth login~ before using this mode.
+* Configuration
+  Use ~customize-group~ to get into the ~ob-bigquery~ group variables.
+
+* Usage
+To create and execute a sample BigQuery query within an Org-mode source block, use the following example:
+
+#+begin_src org
+#+BEGIN_SRC bigquery :project "project-id" :maxrows 10 :var age=30
+SELECT name, age FROM `dataset.my_table` WHERE age > $age
+#+END_SRC
+#+end_src
+
+Some comments about the above example:
+- The ~project~ argument enables you to use different GCP projects to execute different queries.
+- The ~maxrows~ argument overrides the default value of maxrows in ~bq~ to change the maximum values that the query will return.
+- You can use the standard ~var~ argument to create variables that will be replaced in the body. See next section about the different types of variables that are supported.
+
+** Using Different Types of Variables
+
+The package supports different types of variables, including literal values, string values, integers, and lists. Here are examples of how to use each type:
+
+
+*** String Values
+This is the most common case. The mode takes care of quoting so that you can use the same query regardless of the type of parameter.
+
+#+BEGIN_SRC bigquery :var greeting="Hello, World!"
+SELECT * FROM `dataset.my_table` WHERE greeting = $greeting
+#+END_SRC
+
+*** Integer
+#+BEGIN_SRC bigquery :var amount=100
+SELECT * FROM `dataset.my_table` WHERE amount = $amount
+#+END_SRC
+
+*** Literal Values
+These are useful when the variable defines and element of the query itself. Note the double dollar sign.
+#+BEGIN_SRC bigquery :var field="amount" value=100
+SELECT * FROM `dataset.my_table` WHERE $$field = $value
+#+END_SRC
+
+*** Lists
+List are supported to cover for the multi-value use case. The list is translated into a comma separated list of values in the query. Single row tables are also supported to be able to use external tables as arguments. 
+
+#+BEGIN_SRC bigquery :var greetings='("Hello" "Hola" "Hi")
+SELECT * FROM `dataset.my_table` WHERE greeting IN ($greetings)
+#+END_SRC
+
+* Additional Information
+  - [[https://cloud.google.com/bigquery/docs/reference/bq-cli-reference#bq_mk][bq command-line tool reference ]]
+  - [[https://cloud.google.com/bigquery/docs/bq-command-line-tool][Explore the bq command-line tool ]]
+  - [[https://cloud.google.com/sdk/docs/install-sdk][Quickstart: Install the Google Cloud CLI ]]
