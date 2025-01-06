@@ -44,24 +44,24 @@
   :group 'org-babel)
 
 (defcustom ob-bigquery-base-command "bq --headless -sync"
-  "Command to invoke the bq command line utility."
+  "Command to use to invoke the BQ command line utility."
   :type 'string
   :group 'ob-bigquery)
 
 (defcustom ob-bigquery-number-regexp "^-?\\(?:[0-9]+\\(?:[.][0-9]*\\)?\\|[.][0-9]+\\)$"
-  "Regexp that will be used to identify numbers that need to be
- preserved (i.e. not quoted) as such (vs strings) in the query."
+  "Regexp to identify numbers that don't need to be quoted."
   :type 'regexp
   :group 'ob-bigquery)
 
+;;; Babel related variables
 (defcustom org-babel-default-header-args:bigquery
   '((:format . "csv")
     (:maxrows . "100")
     (:headers-p . "yes"))
   "Default parameters that will be used when invoking the BQ command.
-These will be added to `ob-bigquery-base-command'. Notice that
+These will be added to `ob-bigquery-base-command'.  Notice that
 the pretty format might not handle values that need to be quoted
-in the right way. Use with caution."
+in the right way.  Use with caution."
   :type '(alist :key-type symbol :value-type string)
   :group 'ob-bigquery)
 
@@ -70,16 +70,16 @@ in the right way. Use with caution."
     (format    . ("csv" "pretty"))
     (maxrows   . :any)
     (headers-p . ("yes" "no")))
-  "Bigquery specific header arguments."
+  "BigQuery specific header arguments."
   :type '(alist :key-type symbol :value-type (choice (const :tag "Any" :any)
                                                      (repeat :tag "Options" string)))
   :group 'ob-bigquery)
 
 ;;; Internal methods
 (defun ob-bigquery--quote-field (s)
-  "Quote field for inclusion in a bigquery statement.
-S is the field to quote. If the element is not a number (as
-defined by `ob-bigquery-number-regexp', it will be quoted. The
+  "Quote field for inclusion in a BigQuery statement.
+S is the field to quote.  If the element is not a number (as
+defined by `ob-bigquery-number-regexp', it will be quoted.  The
 function supports quoting strings that already have quotes."
   (cond
    ((string-match ob-bigquery-number-regexp s) s) ;; Any number
@@ -98,7 +98,7 @@ Process cell contents by using `org-babel-read'."
             result)))
 
 (defun ob-bigquery--quote-vert (s)
-  "Replace \"|\" with \"\\vert{[]}\"."
+  "Replace \"|\" with \"\\vert{[]}\" in the string S."
   (while (string-match "|" s)
     (setq s (replace-match "\\vert{}" t t s)))
   s)
@@ -116,9 +116,9 @@ Process cell contents by using `org-babel-read'."
 (defun ob-bigquery--expand-parameter (body name value)
   "Expand the NAME parameter to its VALUE in BODY.
 Double quoted variables (e.g. `$$var') values are preserved as
-such. String are quoted, list and horizontal tables are converted
+such.  String are quoted, list and horizontal tables are converted
 into a list of comma separated values and their values quoted if
-they are strings. Everything else is printed via `prin1'."
+they are strings.  Everything else is printed via `prin1'."
   (thread-last
     (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" value) body)
     (replace-regexp-in-string (format "$%s\\b" name)
@@ -133,6 +133,7 @@ they are strings. Everything else is printed via `prin1'."
 
 
 ;;; Babel Interface implementation
+
 (defun org-babel-expand-body:bigquery (body params &optional processed-params)
   "Expand BODY according to the values of PROCESSED-PARAMS (if provided) or PARAMS.
 See `ob-bigquery--expand-parameter' for the types of expansion supported."
@@ -146,8 +147,13 @@ See `ob-bigquery--expand-parameter' for the types of expansion supported."
      vars)
     body))
 
+;; This is needed for the compiler to be able to find the register function
+;; See https://emacs.stackexchange.com/questions/29853/defun-inside-let-with-lexical-binding-gives-byte-compile-warning-the-function-i
+(declare-function ob-bigquery--register-error "ob-bigquery.el")
+
+;;;###autoload
 (defun org-babel-execute:bigquery (body params)
-  "Execute a BODY of Bigquery code with Babel using PARAMS.
+  "Execute a BODY of BigQuery code with Babel using PARAMS.
 This function is called by `org-babel-execute-src-block'."
   (let* (
          (processed-params (org-babel-process-params params))
@@ -170,7 +176,9 @@ This function is called by `org-babel-execute-src-block'."
       "Internal function to identify when the command returned an error
 by advising the relevant error hook. Org does not support any
 other mechanism to get this information."
-      (setq error-code exit-code))
+      (setq error-code exit-code)
+      (if stderr
+          (message "Error running BQ: %s" stderr)))
 
     (advice-add 'org-babel-eval-error-notify :before #'ob-bigquery--register-error)
     ;; Execute command
@@ -214,3 +222,5 @@ Prepare SESSION according to the header arguments specified in PARAMS."
 (provide 'ob-bigquery)
 
 ;;; ob-bigquery.el ends here
+
+;; LocalWords:  PARAMS

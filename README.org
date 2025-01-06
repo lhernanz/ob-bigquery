@@ -1,4 +1,4 @@
-#+TITLE: ob-bigquery.el Emacs org babel support for BigQuery
+#+TITLE: ob-bigquery: Emacs Org-Babel support for BigQuery
 * Installation
 
 This package is not in any repository, therefore, you need to install it manually or by using any of the extensions that can consume packages from GitHub.
