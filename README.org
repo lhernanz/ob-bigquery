@@ -20,7 +20,13 @@ To install the package using ~quelpa~, install ~quelpa~ and ~quelpa-use-package~
 #+END_SRC
 
 ** External dependencies
-   This package requires the ~bq~ command line tool that is part of the ~gcloud CLI~. See installation instructions [[https://cloud.google.com/sdk/docs/install][here]]. Authentication is delegated into the ~gcloud~ command. Therefore, you need to get the right credentials by using ~gcloud auth login~ before using this mode.
+   This package requires the ~bq~ command line tool that is part of the =gcloud CLI=. See installation instructions [[https://cloud.google.com/sdk/docs/install][here]]. Authentication is delegated into the ~gcloud~ command. Therefore, you need to get the right credentials by using ~gcloud auth login~ before using this mode.
+
+   The default configuration for ~bq~ uses the legacy SQL syntax. To be able to use Standard SQL, include the following lines in the =~/.bigqueryrc= file:
+   #+begin_src conf
+[query]
+--use_legacy_sql=false
+   #+end_src
 * Configuration
   Use ~customize-group~ to get into the ~ob-bigquery~ group variables.
 
