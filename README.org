@@ -12,11 +12,10 @@ If installed manually in the load-path, the package can be configured using `use
 
 ** Quelpa
 
-To install the package using ~quelpa~, install ~quelpa~ and ~quelpa-use-package~ and add the following to your Emacs configuration file:
+To install the package using ~quelpa~, install ~quelpa~ ~ and add the following to your Emacs configuration file:
 
 #+BEGIN_SRC emacs-lisp
-(use-package ob-bigquery
-  :quelpa (ob-bigquery :fetcher github :repo "lhernanz/ob-bigquery.git"))
+(quelpa '(ob-bigquery :repo "lhernanz/ob-bigquery" :fetcher github))
 #+END_SRC
 
 ** External dependencies
@@ -73,6 +72,9 @@ List are supported to cover for the multi-value use case. The list is translated
 #+BEGIN_SRC bigquery :var greetings='("Hello" "Hola" "Hi")
 SELECT * FROM `dataset.my_table` WHERE greeting IN ($greetings)
 #+END_SRC
+
+* Development
+This package uses  [[https://github.com/jorgenschaefer/emacs-buttercup][emacs-buttercup]] to implement unit tests and [[https://github.com/alphapapa/makem.sh][makem.sh]] to execute the tests. Executing ~make~ will create a sandbox and execute all the tests. ~make lint~ will execute all the linters. See more options in the ~makem.sh~ github page. To create the sandbox for the first time, add the following variables to the make command ~install-deps=t install-linters=t~.
 
 * Additional Information
   - [[https://cloud.google.com/bigquery/docs/reference/bq-cli-reference#bq_mk][bq command-line tool reference ]]
