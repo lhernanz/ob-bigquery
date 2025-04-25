@@ -41,7 +41,8 @@
 ;;; Variables
 (defgroup ob-bigquery nil
   "Settings for BigQuery integration with org-babel."
-  :group 'org-babel)
+  :group 'org-babel
+  :prefix "ob-bigquery-")
 
 (defcustom ob-bigquery-base-command "bq --headless -sync"
   "Command to use to invoke the BQ command line utility."
