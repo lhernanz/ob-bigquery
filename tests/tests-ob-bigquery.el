@@ -61,5 +61,4 @@
     )
   )
 
-(provide 'ob-bigquery-tests)
 ;;; ob-bigquery-tests.el ends here
