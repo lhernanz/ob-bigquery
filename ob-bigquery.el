@@ -116,10 +116,22 @@ Process cell contents by using `org-babel-read'."
 
 (defun ob-bigquery--expand-parameter (body name value)
   "Expand the NAME parameter to its VALUE in BODY.
-Double quoted variables (e.g. `$$var') values are preserved as
-such.  String are quoted, list and horizontal tables are converted
-into a list of comma separated values and their values quoted if
-they are strings.  Everything else is printed via `prin1'."
+
+This function replaces placeholders in the BODY string with the
+corresponding VALUE.  The following rules are applied:
+
+- Double-quoted variables (e.g., `$$var`) are replaced directly with VALUE.
+- Single-quoted variables (e.g., `$var`) are replaced based on the type
+  of VALUE:
+  - If VALUE is a list or a horizontal table, it is converted into a
+    comma-separated list, with string elements quoted.
+  - If VALUE is a string, it is quoted.
+  - For other types, VALUE is formatted using `prin1`.
+
+Arguments:
+- BODY: The query body as a string.
+- NAME: The name of the parameter to replace.
+- VALUE: The value to substitute for the parameter."
   (thread-last
     (replace-regexp-in-string (format "$$%s\\b" name) (format "%s" value) body)
     (replace-regexp-in-string (format "$%s\\b" name)
@@ -181,6 +193,7 @@ other mechanism to get this information."
       (if stderr
           (message "Error running BQ: %s" stderr)))
 
+    ;; This advice is needed to be able to capture the error
     (advice-add 'org-babel-eval-error-notify :before #'ob-bigquery--register-error)
     ;; Execute command
     (with-temp-buffer
