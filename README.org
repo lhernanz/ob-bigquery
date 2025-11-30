@@ -27,7 +27,29 @@ To install the package using ~quelpa~, install ~quelpa~ ~ and add the following 
 --use_legacy_sql=false
    #+end_src
 * Configuration
-  Use ~customize-group~ to get into the ~ob-bigquery~ group variables.
+
+The package provides several configuration options that can be customized using ~customize-group~ to access the ~ob-bigquery~ group variables.
+
+** Default Header Arguments
+
+The following default parameters are used when invoking the BQ command:
+
+- ~batch~ :: "true" - Run queries in batch mode
+- ~format~ :: "csv" - Output format for query results
+- ~headers-p~ :: "yes" - Include column headers in output
+- ~job-timeout~ :: "0" - Job timeout in milliseconds (0 or empty string = no timeout)
+- ~maxrows~ :: "100" - Maximum number of rows to return
+
+** Available Header Arguments
+
+The following header arguments can be used in BigQuery source blocks:
+
+- ~project~ :: Any value - GCP project ID to execute the query against
+- ~batch~ :: "true" or "false" - Run queries in batch mode
+- ~format~ :: "csv" or "pretty" - Output format for query results
+- ~headers-p~ :: "yes" or "no" - Include column headers in output
+- ~job-timeout~ :: Any positive integer value - Job timeout in milliseconds (empty string or "0" = no timeout)
+- ~maxrows~ :: Any positive integer value - Maximum number of rows to return
 
 * Usage
 To create and execute a sample BigQuery query within an Org-mode source block, use the following example:
@@ -39,8 +61,8 @@ To create and execute a sample BigQuery query within an Org-mode source block, u
 #+end_example
 
 Some comments about the above example:
-- The ~project~ argument enables you to use different GCP projects to execute different queries. If not specified, ~bq~ will select the default project
-- The ~maxrows~ argument overrides the default value of maxrows in ~bq~ to change the maximum values that the query will return
+- The ~project~ argument enables you to use different GCP projects to execute different queries. If not specified, ~bq~ will select the default project configured in your gcloud settings
+- The ~maxrows~ argument overrides the default value of maxrows to change the maximum number of rows that the query will return
 - You can use the standard ~var~ argument to create variables that will be replaced in the body. See next section about the different types of variables that are supported
 
 ** Using Different Types of Variables
@@ -61,20 +83,42 @@ SELECT * FROM `dataset.my_table` WHERE amount = $amount
 #+END_SRC
 
 *** Literal Values
-These are useful when the variable defines and element of the query itself. Note the double dollar sign.
+These are useful when the variable defines an element of the query itself. Note the double dollar sign.
 #+BEGIN_SRC bigquery :var field="amount" value=100
 SELECT * FROM `dataset.my_table` WHERE $$field = $value
 #+END_SRC
 
 *** Lists
-List are supported to cover for the multi-value use case. The list is translated into a comma separated list of values in the query. Single row tables are also supported to be able to use external tables as arguments. 
+Lists are supported to cover for the multi-value use case. The list is translated into a comma separated list of values in the query. Single row tables are also supported to be able to use external tables as arguments. 
 
 #+BEGIN_SRC bigquery :var greetings='("Hello" "Hola" "Hi")
 SELECT * FROM `dataset.my_table` WHERE greeting IN ($greetings)
 #+END_SRC
 
 * Development
-This package uses  [[https://github.com/jorgenschaefer/emacs-buttercup][emacs-buttercup]] to implement unit tests and [[https://github.com/alphapapa/makem.sh][makem.sh]] to execute the tests. Executing ~make~ will create a sandbox and execute all the tests. ~make lint~ will execute all the linters. See more options in the ~makem.sh~ github page. To create the sandbox for the first time, add the following variables to the make command ~install-deps=t install-linters=t~.
+This package uses  [[https://github.com/jorgenschaefer/emacs-buttercup][emacs-buttercup]] to implement unit tests and [[https://github.com/alphapapa/makem.sh][makem.sh]] to execute the tests. Every time that a new version of Emacs is used (or the first time that this command is executed), you need to create a new sandbox using the first command below. You can read the [[https://github.com/alphapapa/makem.sh][makem.sh]] for more options.
+
+#+begin_src sh
+# Initialize a permanent sandbox directory, DIR (the developer might
+# choose to recreate it manually when necessary, leaving it in place
+# to save time otherwise).  Then run all linters and tests.
+$ make install-deps=t install-linters=t
+
+# Run all rules.
+$ make all
+
+# Run all lints.
+$ make lint
+
+# Run all tests.
+$ make test
+
+# Run ERT tests with verbosity level 1.
+$ make v=v test-ert
+
+# Run Buttercup tests with verbosity level 2.
+$ make v=vv test-buttercup
+#+end_src
 
 * Additional Information
   - [[https://cloud.google.com/bigquery/docs/reference/bq-cli-reference#bq_mk][bq command-line tool reference ]]

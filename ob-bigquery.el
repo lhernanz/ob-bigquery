@@ -1,10 +1,9 @@
-;;; ob-bigquery.el --- Babel Functions for BigQuery Databases -*- lexical-binding: t; -*-
+;;; ob-bigquery.el --- Babel support for BigQuery -*- lexical-binding: t; -*-x
 
 ;; Copyright (C) 2024-2025 Luis Miguel Hernanz
 
 ;; Author: Luis Miguel Hernanz
 ;; Keywords: lisp
-;; Package-Version: 20240903.93446
 ;; Package-Requires: ((emacs "29.1") (org "9.7"))
 ;; URL: https://www.github.com/lhernanz/ob-bigquery
 
@@ -44,7 +43,7 @@
   :group 'org-babel
   :prefix "ob-bigquery-")
 
-(defcustom ob-bigquery-base-command "bq --headless -sync"
+(defcustom ob-bigquery-base-command "bq --headless=true --quiet=true --synchronous_mode=true"
   "Command to use to invoke the BQ command line utility."
   :type 'string
   :group 'ob-bigquery)
@@ -56,9 +55,11 @@
 
 ;;; Babel related variables
 (defcustom org-babel-default-header-args:bigquery
-  '((:format . "csv")
-    (:maxrows . "100")
-    (:headers-p . "yes"))
+  '((:batch       . "true")
+    (:format      . "csv")
+    (:headers-p   . "yes")
+    (:job-timeout . "0")
+    (:maxrows     . "100"))
   "Default parameters that will be used when invoking the BQ command.
 These will be added to `ob-bigquery-base-command'.  Notice that
 the pretty format might not handle values that need to be quoted
@@ -67,10 +68,12 @@ in the right way.  Use with caution."
   :group 'ob-bigquery)
 
 (defcustom org-babel-header-args:bigquery
-  '((project   . :any)
-    (format    . ("csv" "pretty"))
-    (maxrows   . :any)
-    (headers-p . ("yes" "no")))
+  '((project     . :any)
+    (batch       . ("true" "false"))
+    (format      . ("csv" "pretty"))
+    (headers-p   . ("yes" "no"))
+    (job-timeout . :any)
+    (maxrows     . :any))
   "BigQuery specific header arguments."
   :type '(alist :key-type symbol :value-type (choice (const :tag "Any" :any)
                                                      (repeat :tag "Options" string)))
@@ -147,6 +150,37 @@ Arguments:
 
 ;;; Babel Interface implementation
 
+(defun ob-bigquery--build-command (processed-params)
+  "Build the BigQuery command string from PROCESSED-PARAMS.
+PROCESSED-PARAMS is an alist of processed header arguments.
+
+Returns a command string that can be executed to run a BigQuery query.
+The command includes:
+- Base command (from `ob-bigquery-base-command')
+- Project ID (if specified)
+- Format (csv or pretty)
+- Max rows limit
+- Batch mode setting
+- Job timeout (if specified and non-zero)"
+  (let ((project (cdr (assq :project processed-params)))
+        (batch (cdr (assq :batch processed-params)))
+        (format (cdr (assq :format processed-params)))
+        (maxrows (cdr (assq :maxrows processed-params)))
+        (timeout (cdr (assq :job-timeout processed-params))))
+    (org-fill-template
+     "%cmd %project %format query %maxrows %timeout %batch"
+     (list
+      (cons "cmd" ob-bigquery-base-command)
+      (cons "project" (if project (format "--project_id=%s" project) ""))
+      (cons "format" (format "--format=%s" format))
+      (cons "maxrows" (format "--max_rows=%s" maxrows))
+      (cons "batch" (format "--batch=%s" batch))
+      (cons "timeout" (if (and timeout
+                               (not (string= timeout ""))
+                               (not (string= timeout "0")))
+                          (format "--job_timeout_ms=%s" timeout)
+                        ""))))))
+
 (defun org-babel-expand-body:bigquery (body params &optional processed-params)
   "Expand BODY according to the values of PROCESSED-PARAMS (if provided) or PARAMS.
 See `ob-bigquery--expand-parameter' for the types of expansion supported."
@@ -171,17 +205,9 @@ This function is called by `org-babel-execute-src-block'."
   (let* (
          (processed-params (org-babel-process-params params))
          (result-params (split-string (or (cdr (assq :results processed-params)) "")))
-         (project (cdr (assq :project processed-params)))
          (format (cdr (assq :format processed-params)))
-         (maxrows (cdr (assq :maxrows processed-params)))
          (headers-p (cdr (assq :headers-p processed-params)))
-         (command (org-fill-template
-                   "%cmd %project %format query %maxrows"
-                   (list
-                    (cons "cmd" ob-bigquery-base-command)
-                    (cons "project" (if project (format "--project_id %s" project) ""))
-                    (cons "format" (format "--format %s" format))
-                    (cons "maxrows" (format "--max_rows %s" maxrows)))))
+         (command (ob-bigquery--build-command processed-params))
          (error-code 0)
          (table-value))
 
@@ -192,7 +218,7 @@ other mechanism to get this information."
       (setq error-code exit-code)
       (if stderr
           (message "Error running BQ: %s" stderr)))
-
+    (message "Executing BigQuery command: %s" command)
     ;; This advice is needed to be able to capture the error
     (advice-add 'org-babel-eval-error-notify :before #'ob-bigquery--register-error)
     ;; Execute command
