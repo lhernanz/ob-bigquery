@@ -1,4 +1,4 @@
-;;; ob-bigquery.el --- Babel support for BigQuery -*- lexical-binding: t; -*-x
+;;; ob-bigquery.el --- Babel support for BigQuery -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2024-2025 Luis Miguel Hernanz
 
