@@ -218,7 +218,6 @@ other mechanism to get this information."
       (setq error-code exit-code)
       (if stderr
           (message "Error running BQ: %s" stderr)))
-    (message "Executing BigQuery command: %s" command)
     ;; This advice is needed to be able to capture the error
     (advice-add 'org-babel-eval-error-notify :before #'ob-bigquery--register-error)
     ;; Execute command
